@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 export default function Admin() {
   const [queues, setQueues] = useState({
@@ -9,6 +9,24 @@ export default function Admin() {
     kasir: 0,
   });
 
+  const [voices, setVoices] = useState([]);
+  const voiceRef = useRef(null);
+
+  // Ambil voice daftar dari browser
+  useEffect(() => {
+    const loadVoices = () => {
+      const allVoices = window.speechSynthesis.getVoices();
+      setVoices(allVoices);
+
+      // Pilih suara bahasa Indonesia kalau ada
+      const indoVoice = allVoices.find((v) => v.lang.startsWith("id"));
+      voiceRef.current = indoVoice || null;
+    };
+
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }, []);
+
   // Simpan ke localStorage supaya Display sync
   useEffect(() => {
     localStorage.setItem("queues", JSON.stringify(queues));
@@ -16,24 +34,30 @@ export default function Admin() {
 
   // Fungsi buat announce pakai SpeechSynthesis
   const announce = (loket, number) => {
-  if ("speechSynthesis" in window) {
-    const numText = numberToBahasa(number); // ubah angka ke teks
-    const poliText = poliToBahasa(loket);   // ubah poli ke teks
-    const msg = new SpeechSynthesisUtterance(
-      `Nomor antrian ${numText}, silakan menuju ${poliText}`
-    );
-    msg.lang = "id-ID"; 
-    msg.rate = 0.9;
-    window.speechSynthesis.speak(msg);
-  }
-};
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
 
+      const numText = numberToBahasa(number);
+      const poliText = poliToBahasa(loket);
 
+      const msg = new SpeechSynthesisUtterance(
+        `Nomor antrian ${numText}, silakan menuju ${poliText}`
+      );
+      msg.lang = "id-ID";
+      msg.rate = 1.0;
+
+      // kalau ada voice Indo, pakai itu
+      if (voiceRef.current) {
+        msg.voice = voiceRef.current;
+      }
+
+      window.speechSynthesis.speak(msg);
+    }
+  };
 
   const handleNext = (key, label) => {
     setQueues((prev) => {
       const newQueues = { ...prev, [key]: prev[key] + 1 };
-      // announce nomor baru
       announce(label, newQueues[key]);
       return newQueues;
     });
@@ -46,53 +70,51 @@ export default function Admin() {
     }));
   };
 
-    // Fungsi konversi angka ke teks bahasa Indonesia
-const numberToBahasa = (num) => {
-  const satuan = [
-    "nol",
-    "satu",
-    "dua",
-    "tiga",
-    "empat",
-    "lima",
-    "enam",
-    "tujuh",
-    "delapan",
-    "sembilan",
-    "sepuluh",
-    "sebelas",
-  ];
+  // Fungsi konversi angka ke teks bahasa Indonesia
+  const numberToBahasa = (num) => {
+    const satuan = [
+      "nol",
+      "satu",
+      "dua",
+      "tiga",
+      "empat",
+      "lima",
+      "enam",
+      "tujuh",
+      "delapan",
+      "sembilan",
+      "sepuluh",
+      "sebelas",
+    ];
 
-  if (num < 12) return satuan[num];
-  if (num < 20) return satuan[num - 10] + " belas";
-  if (num < 100) {
-    const puluhan = Math.floor(num / 10);
-    const sisa = num % 10;
-    return (
-      satuan[puluhan] + " puluh" + (sisa > 0 ? " " + satuan[sisa] : "")
-    );
-  }
-  return num.toString(); // fallback kalau di atas 99
-};
+    if (num < 12) return satuan[num];
+    if (num < 20) return satuan[num - 10] + " belas";
+    if (num < 100) {
+      const puluhan = Math.floor(num / 10);
+      const sisa = num % 10;
+      return (
+        satuan[puluhan] + " puluh" + (sisa > 0 ? " " + satuan[sisa] : "")
+      );
+    }
+    return num.toString();
+  };
 
-const poliToBahasa = (poli) => {
-  switch (poli) {
-    case "Poli 1":
-      return "Poli satu";
-    case "Poli 2":
-      return "Poli dua";
-    case "Poli 3":
-      return "Poli tiga";
-    case "Apotek":
-      return "Apotek";
-    case "Kasir":
-      return "Kasir";
-    default:
-      return poli;
-  }
-};
-
-
+  const poliToBahasa = (poli) => {
+    switch (poli) {
+      case "Poli 1":
+        return "Poli satu";
+      case "Poli 2":
+        return "Poli dua";
+      case "Poli 3":
+        return "Poli tiga";
+      case "Apotik":
+        return "Apotek";
+      case "Kasir":
+        return "Kasir";
+      default:
+        return poli;
+    }
+  };
 
   return (
     <div className="w-screen h-screen bg-white flex flex-col p-6">

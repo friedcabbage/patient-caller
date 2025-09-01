@@ -41,7 +41,7 @@ export default function Admin() {
       const poliText = poliToBahasa(loket);
 
       const msg = new SpeechSynthesisUtterance(
-        `Nomor antrian ${numText}, silakan menuju ${poliText}`
+        `Nomor antrian ${numText}, silahkan menuju ke ${poliText}`
       );
       msg.lang = "id-ID";
       msg.rate = 1.0;
@@ -56,19 +56,28 @@ export default function Admin() {
   };
 
   const handleNext = (key, label) => {
-    setQueues((prev) => {
-      const newQueues = { ...prev, [key]: prev[key] + 1 };
+  setQueues((prev) => {
+    const newQueues = { ...prev, [key]: prev[key] + 1 };
+    if (newQueues[key] > 0) {
       announce(label, newQueues[key]);
-      return newQueues;
-    });
-  };
+    }
+    return newQueues;
+  });
+};
 
-  const handlePrev = (key) => {
-    setQueues((prev) => ({
-      ...prev,
-      [key]: prev[key] > 0 ? prev[key] - 1 : 0,
-    }));
-  };
+const handlePrev = (key, label) => {
+  setQueues((prev) => {
+    const newNumber = prev[key] > 0 ? prev[key] - 1 : 0;
+    const newQueues = { ...prev, [key]: newNumber };
+
+    if (newNumber > 0) {
+      announce(label, newNumber);
+    }
+
+    return newQueues;
+  });
+};
+
 
   // Fungsi konversi angka ke teks bahasa Indonesia
   const numberToBahasa = (num) => {
@@ -108,7 +117,7 @@ export default function Admin() {
       case "Poli 3":
         return "Poli tiga";
       case "Apotik":
-        return "Apotek";
+        return "Apotik";
       case "Kasir":
         return "Kasir";
       default:
@@ -134,7 +143,7 @@ export default function Admin() {
             </p>
             <div className="flex justify-center gap-4">
               <button
-                onClick={() => handlePrev(key)}
+                onClick={() => handlePrev(key, `Poli ${idx + 1}`)}
                 className="px-4 py-2 bg-gray-300 rounded-lg"
               >
                 Previous
@@ -163,7 +172,7 @@ export default function Admin() {
             </p>
             <div className="flex justify-center gap-4">
               <button
-                onClick={() => handlePrev(key)}
+                onClick={() => handlePrev(key, label)}
                 className="px-4 py-2 bg-gray-300 rounded-lg"
               >
                 Previous

@@ -9,119 +9,132 @@ export default function Admin() {
     kasir: 0,
   });
 
-  const [voices, setVoices] = useState([]);
+  // counter global hanya untuk Poli 1–3
+  const [globalCounter, setGlobalCounter] = useState(0);
+
+  // history khusus Poli 1–3 (supaya Previous ambil angka yg pernah tampil)
+  const [historyPoli, setHistoryPoli] = useState({
+    poli1: [],
+    poli2: [],
+    poli3: [],
+  });
+
   const voiceRef = useRef(null);
 
-  // Ambil voice daftar dari browser
+  // Load voices (ambil voice Bahasa Indonesia kalau ada)
   useEffect(() => {
     const loadVoices = () => {
+      if (!("speechSynthesis" in window)) return;
       const allVoices = window.speechSynthesis.getVoices();
-      setVoices(allVoices);
-
-      // Pilih suara bahasa Indonesia kalau ada
-      const indoVoice = allVoices.find((v) => v.lang.startsWith("id"));
+      const indoVoice = allVoices.find((v) => v.lang?.startsWith("id"));
       voiceRef.current = indoVoice || null;
     };
-
     loadVoices();
-    window.speechSynthesis.onvoiceschanged = loadVoices;
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
   }, []);
 
-  // Simpan ke localStorage supaya Display sync
+  // Sync ke Display via localStorage
   useEffect(() => {
     localStorage.setItem("queues", JSON.stringify(queues));
   }, [queues]);
 
-  // Fungsi buat announce pakai SpeechSynthesis
+  // Umum: text-to-speech
   const announce = (loket, number) => {
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
+    if (!("speechSynthesis" in window)) return;
+    if (number <= 0) return; // jangan umumkan 0
+    window.speechSynthesis.cancel();
 
-      const numText = numberToBahasa(number);
-      const poliText = poliToBahasa(loket);
-
-      const msg = new SpeechSynthesisUtterance(
-        `Nomor antrian ${numText}, silahkan menuju ke ${poliText}`
-      );
-      msg.lang = "id-ID";
-      msg.rate = 1.0;
-
-      // kalau ada voice Indo, pakai itu
-      if (voiceRef.current) {
-        msg.voice = voiceRef.current;
-      }
-
-      window.speechSynthesis.speak(msg);
-    }
+    const msg = new SpeechSynthesisUtterance(
+      `Nomor antrian ${numberToBahasa(number)}, silahkan menuju ke ${poliToBahasa(loket)}`
+    );
+    msg.lang = "id-ID";
+    msg.rate = 1.0;
+    if (voiceRef.current) msg.voice = voiceRef.current;
+    window.speechSynthesis.speak(msg);
   };
 
-  const handleNext = (key, label) => {
-  setQueues((prev) => {
-    const newQueues = { ...prev, [key]: prev[key] + 1 };
-    if (newQueues[key] > 0) {
-      announce(label, newQueues[key]);
-    }
-    return newQueues;
-  });
-};
+  // NEXT untuk Poli 1–3 (pakai global counter + catat history)
+  const handleNextPoli = (key, label) => {
+    setGlobalCounter((prev) => {
+      const nextNumber = prev + 1;
 
-const handlePrev = (key, label) => {
-  setQueues((prev) => {
-    const newNumber = prev[key] > 0 ? prev[key] - 1 : 0;
-    const newQueues = { ...prev, [key]: newNumber };
+      // update angka tampil
+      setQueues((q) => ({ ...q, [key]: nextNumber }));
 
-    if (newNumber > 0) {
-      announce(label, newNumber);
-    }
+      // append ke history poli tsb
+      setHistoryPoli((h) => ({
+        ...h,
+        [key]: [...(h[key] || []), nextNumber],
+      }));
 
-    return newQueues;
-  });
-};
+      announce(label, nextNumber);
+      return nextNumber;
+    });
+  };
 
+  // PREV untuk Poli 1–3 (pakai history; ambil angka yang benar2 tampil sebelumnya)
+  const handlePrevPoli = (key, label) => {
+    setHistoryPoli((h) => {
+      const hist = h[key] || [];
+      if (hist.length === 0) return h; // belum ada apa-apa, abaikan
 
-  // Fungsi konversi angka ke teks bahasa Indonesia
+      // buang angka terakhir
+      const newHist = hist.slice(0, -1);
+      // angka yang sekarang harus tampil = elemen terakhir newHist (atau 0 kalau kosong)
+      const current = newHist.length ? newHist[newHist.length - 1] : 0;
+
+      setQueues((q) => ({ ...q, [key]: current }));
+      if (current > 0) announce(label, current);
+
+      return { ...h, [key]: newHist };
+    });
+  };
+
+  // NEXT / PREV untuk Apotik & Kasir (manual increment/decrement biasa)
+  const handleNextManual = (key, label) => {
+    setQueues((prev) => {
+      const next = prev[key] + 1;
+      const updated = { ...prev, [key]: next };
+      announce(label, next);
+      return updated;
+    });
+  };
+
+  const handlePrevManual = (key, label) => {
+    setQueues((prev) => {
+      const next = prev[key] > 0 ? prev[key] - 1 : 0;
+      const updated = { ...prev, [key]: next };
+      if (next > 0) announce(label, next);
+      return updated;
+    });
+  };
+
+  // Konversi angka -> teks Indonesia (singkat)
   const numberToBahasa = (num) => {
     const satuan = [
-      "nol",
-      "satu",
-      "dua",
-      "tiga",
-      "empat",
-      "lima",
-      "enam",
-      "tujuh",
-      "delapan",
-      "sembilan",
-      "sepuluh",
-      "sebelas",
+      "nol","satu","dua","tiga","empat","lima",
+      "enam","tujuh","delapan","sembilan","sepuluh","sebelas",
     ];
-
     if (num < 12) return satuan[num];
     if (num < 20) return satuan[num - 10] + " belas";
     if (num < 100) {
       const puluhan = Math.floor(num / 10);
       const sisa = num % 10;
-      return (
-        satuan[puluhan] + " puluh" + (sisa > 0 ? " " + satuan[sisa] : "")
-      );
+      return satuan[puluhan] + " puluh" + (sisa ? " " + satuan[sisa] : "");
     }
     return num.toString();
   };
 
   const poliToBahasa = (poli) => {
     switch (poli) {
-      case "Poli 1":
-        return "Poli satu";
-      case "Poli 2":
-        return "Poli dua";
-      case "Poli 3":
-        return "Poli tiga";
-      case "Apotik":
-        return "Apotik";
-      case "Kasir":
-        return "Kasir";
-      default:
-        return poli;
+      case "Poli 1": return "Poli satu";
+      case "Poli 2": return "Poli dua";
+      case "Poli 3": return "Poli tiga";
+      case "Apotik": return "Apotik";
+      case "Kasir": return "Kasir";
+      default: return poli;
     }
   };
 
@@ -131,7 +144,7 @@ const handlePrev = (key, label) => {
         Admin Panel Antrian
       </h1>
 
-      {/* 3 kolom untuk Poli */}
+      {/* 3 kolom Poli (pakai global + history) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {["poli1", "poli2", "poli3"].map((key, idx) => (
           <div key={key} className="bg-white rounded-2xl shadow p-6 text-center">
@@ -143,13 +156,13 @@ const handlePrev = (key, label) => {
             </p>
             <div className="flex justify-center gap-4">
               <button
-                onClick={() => handlePrev(key, `Poli ${idx + 1}`)}
+                onClick={() => handlePrevPoli(key, `Poli ${idx + 1}`)}
                 className="px-4 py-2 bg-gray-300 rounded-lg"
               >
                 Previous
               </button>
               <button
-                onClick={() => handleNext(key, `Poli ${idx + 1}`)}
+                onClick={() => handleNextPoli(key, `Poli ${idx + 1}`)}
                 className="px-4 py-2 bg-green-500 text-white rounded-lg"
               >
                 Next
@@ -159,7 +172,7 @@ const handlePrev = (key, label) => {
         ))}
       </div>
 
-      {/* 2 kolom untuk Apotik & Kasir */}
+      {/* 2 kolom Apotik & Kasir (manual) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
         {[
           { key: "apotik", label: "Apotik" },
@@ -172,13 +185,13 @@ const handlePrev = (key, label) => {
             </p>
             <div className="flex justify-center gap-4">
               <button
-                onClick={() => handlePrev(key, label)}
+                onClick={() => handlePrevManual(key, label)}
                 className="px-4 py-2 bg-gray-300 rounded-lg"
               >
                 Previous
               </button>
               <button
-                onClick={() => handleNext(key, label)}
+                onClick={() => handleNextManual(key, label)}
                 className="px-4 py-2 bg-green-500 text-white rounded-lg"
               >
                 Next
